@@ -100,13 +100,16 @@ def load_embeddings(folder_path):
                     image_path = os.path.join(person_path, file)
                     image = cv2.imread(image_path)
                     try:
-                        # Resize และสร้าง embedding
-                        image = cv2.resize(image, (160, 160))
-                        embedding = get_face_embedding(image)
-                        embeddings.append(embedding)
-                        labels.append(label_map[person_folder])
+                        # Convert to RGB before passing to MTCNN
+                        face_embedding = get_face_embeddingMTCNN(image)
+
+                        if face_embedding is not None:
+                            embeddings.append(face_embedding)
+                            labels.append(label_map[person_folder])
+
                     except Exception as e:
                         print(f"Error processing {image_path}: {e}")
+
 
     return np.array(embeddings), np.array(labels), label_map
 
