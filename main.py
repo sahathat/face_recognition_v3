@@ -1,146 +1,11 @@
-import os
+
 import cv2
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from facenet_pytorch import MTCNN, InceptionResnetV1
-import torch
-from PIL import Image
 from collections import deque
 import matplotlib.pyplot as plt
+from face_model import recognize_face, load_model
 
-# โหลดโมเดล FaceNet
-mtcnn = MTCNN(keep_all=True)
-model = InceptionResnetV1(pretrained='vggface2').eval()
-
-def get_face_embedding(face):
-    """สร้าง face embedding จากภาพ"""
-    face = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-    face_pil = Image.fromarray(face)
-    face_pil = face_pil.resize((160, 160))
-    face_tensor = torch.tensor(np.array(face_pil) / 255.0).permute(2, 0, 1).unsqueeze(0).float()
-
-    with torch.no_grad():
-        embedding = model(face_tensor).numpy().flatten()
-    return embedding
-
-def get_face_embeddingMTCNN(face):
-    """Create face embedding from the image"""
-    face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-    
-    # Use MTCNN to detect faces in the image
-    faces = mtcnn(face_rgb)
-    
-    if faces is None:
-        return None  # No faces detected
-    
-    # Assuming we only care about the first detected face
-    face_embedding = None
-    for detected_face in faces:
-        with torch.no_grad():
-            embedding = model(detected_face.unsqueeze(0)).cpu().numpy().flatten()
-        face_embedding = embedding # Return embedding and confidence for the first face
-    
-    return face_embedding
-
-def get_face_embeddingMTCNNgraph(face):
-    """Create face embedding from the image"""
-    face_rgb = cv2.cvtColor(face, cv2.COLOR_BGR2RGB)
-    
-    # Use MTCNN to detect faces in the image
-    boxes, probs = mtcnn.detect(face_rgb)  # Get both bounding boxes and probabilities (confidence)
-    
-    if boxes is None:
-        return None, 0  # No faces detected
-    
-    # Assuming we only care about the first detected face
-    face_embedding = None
-    max_confidence = 0  # To store maximum confidence value for the detected faces
-
-    for i, box in enumerate(boxes):
-        confidence = probs[i]  # Confidence of the i-th detected face
-        max_confidence = max(max_confidence, confidence)  # Keep track of the highest confidence
-
-        # Extract face region of interest (ROI)
-        detected_face = face_rgb[int(box[1]):int(box[3]), int(box[0]):int(box[2])]
-
-        # Check if the face size is valid (avoid very small faces)
-        if detected_face.shape[0] < 20 or detected_face.shape[1] < 20:
-            print(f"Detected face is too small: {detected_face.shape}")
-            continue  # Skip this face if it's too small
-        
-        # Resize the face to 160x160 pixels (required by the model)
-        detected_face_resized = cv2.resize(detected_face, (160, 160))
-
-        # Extract embedding from face ROI
-        detected_face_tensor = torch.tensor(np.array(detected_face_resized) / 255.0).permute(2, 0, 1).unsqueeze(0).float()
-        with torch.no_grad():
-            embedding = model(detected_face_tensor).cpu().numpy().flatten()
-        
-        face_embedding = embedding  # You can store embeddings for each face if needed
-
-    return face_embedding, max_confidence
-
-def load_embeddings(folder_path):
-    """โหลด embeddings และ labels จากโฟลเดอร์"""
-    embeddings = []
-    labels = []
-    label_map = {}  # เก็บ mapping ของชื่อเป็น label ID
-    current_label = 0
-
-    for person_folder in os.listdir(folder_path):
-        person_path = os.path.join(folder_path, person_folder)
-        if os.path.isdir(person_path):
-            if person_folder not in label_map:
-                label_map[person_folder] = current_label
-                current_label += 1
-
-            for file in os.listdir(person_path):
-                if file.endswith(('.jpg', '.png', '.jpeg')):
-                    image_path = os.path.join(person_path, file)
-                    image = cv2.imread(image_path)
-                    try:
-                        # Convert to RGB before passing to MTCNN
-                        face_embedding = get_face_embeddingMTCNN(image)
-
-                        if face_embedding is not None:
-                            embeddings.append(face_embedding)
-                            labels.append(label_map[person_folder])
-
-                    except Exception as e:
-                        print(f"Error processing {image_path}: {e}")
-
-
-    return np.array(embeddings), np.array(labels), label_map
-
-# โหลดข้อมูล
-faces_folder = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/faces"
-X, y, label_map = load_embeddings(faces_folder)
-
-# แบ่งชุดข้อมูล train/test
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Train SVM Classifier
-clf = SVC(kernel='linear', probability=True)
-clf.fit(X_train, y_train)
-
-# ประเมินผล
-accuracy = clf.score(X_test, y_test)
-print(f"Model Accuracy: {accuracy:.2f}")
-
-# Mapping กลับจาก label เป็นชื่อคน
-reverse_label_map = {v: k for k, v in label_map.items()}
-
-
-def recognize_face(face, clf, reverse_label_map, threshold=0.6):
-    """ทำนายชื่อของใบหน้าใหม่"""
-    embedding = get_face_embeddingMTCNN(face)
-    label = clf.predict([embedding])[0]
-    confidence = clf.predict_proba([embedding]).max()
-    if confidence < threshold:
-        return "Unknown", confidence
-    name = reverse_label_map[label]
-    return name, confidence
+clf, reverse_label_map = load_model()
 
 # ทดสอบด้วยรูปใหม่
 test_image_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/img/benz.jpeg"
@@ -153,8 +18,8 @@ name, confidence = recognize_face(test_image, clf, reverse_label_map)
 print(f"Recognized: {name} with confidence {confidence:.2f}")
 
 # Load the pre-trained model and config file
-model_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/models/res10_300x300_ssd_iter_140000.caffemodel"
-config_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/models/deploy.prototxt"
+model_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/premodels/res10_300x300_ssd_iter_140000.caffemodel"
+config_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/premodels/deploy.prototxt"
 
 # ใช้ OpenCV DNN สำหรับตรวจจับใบหน้า
 face_net = cv2.dnn.readNetFromCaffe(config_path, model_path)
@@ -209,7 +74,7 @@ ax.set_ylim(0, 1)  # Confidence values range between 0 and 1
 ax.set_title("Real-time Confidence of Face Recognition")
 ax.set_xlabel("Frame")
 ax.set_ylabel("Confidence")
-ax.legend(loc="best")
+# ax.legend(loc="best")
 
 # Real-time video stream processing
 confidence_history = []
