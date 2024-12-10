@@ -6,16 +6,38 @@ import matplotlib.pyplot as plt
 from face_model import recognize_face, load_model
 
 clf, reverse_label_map = load_model()
-
+people = list(reverse_label_map.values()) + ["Unknown"]
+confidences = [0.0]
 # ทดสอบด้วยรูปใหม่
-test_image_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/img/benz.jpeg"
-test_image = cv2.imread(test_image_path)
-if test_image is None:
-    print(f"Error: Image not found at {test_image_path}")
-test_image = cv2.resize(test_image, (160, 160))
+test_image_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/img"
+for person_path in os.listdir(test_image_path):
+    test_image = cv2.imread(person_path)
+    if test_image is None:
+        print(f"Error: Image not found at {test_image_path}")
+    
+    test_image = cv2.resize(test_image, (160, 160))
 
-name, confidence = recognize_face(test_image, clf, reverse_label_map)
-print(f"Recognized: {name} with confidence {confidence:.2f}")
+    name, confidence = recognize_face(test_image, clf, reverse_label_map)
+    print(f"Recognized: {name} with confidence {confidence:.2f}")
+
+    # Retrieve index when name is in reverse_label_map
+    if name in reverse_label_map.values():
+        reverse_label_map.values()
+    else:
+        people["Unknown"] 
+
+# Save the bar chart as an image file without displaying it
+plt.figure(figsize=(10, 6))
+plt.bar(categories, confidence_scores, color='skyblue', alpha=0.7)
+plt.ylim(0, 1)
+plt.xlabel("Categories", fontsize=14)
+plt.ylabel("Confidence Scores", fontsize=14)
+plt.title("Confidence Scores by Categories", fontsize=16)
+plt.axhline(y=0.6, color='red', linestyle='--', label='Threshold (0.6)')
+plt.legend()
+
+plt.tight_layout()
+plt.savefig("C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/models/confidence_scores_chart.png")
 
 # Load the pre-trained model and config file
 model_path = "C:/Users/sahathat.y/source/repos/face_recognition_v3/myenv/premodels/res10_300x300_ssd_iter_140000.caffemodel"
